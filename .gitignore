@@ -1,0 +1,48 @@
+# Build and Binary Directories
+[Bb]uild/
+out/
+bin/
+obj/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeSettings.json
+CMakeUserPresets.json
+install_manifest.txt
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.idb
+*.sqlitdb
+*.opendb
+*.db
+*.vcxproj.user
+
+# Compiled Objects and Binaries
+*.exe
+*.pdb
+*.ilk
+*.obj
+*.lib
+*.dll
+*.exp
+*.res
+*.log
+*.tlog
+*.lastbuildstate
+*.dmp
+
+# Package Management
+vcpkg_installed/
+packages/
+
+# OS Generated
+.DS_Store
+Thumbs.db
