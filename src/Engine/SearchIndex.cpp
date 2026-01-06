@@ -118,6 +118,6 @@ std::wstring SearchIndex::GetFullPath(unsigned long long id) const {
 
 size_t SearchIndex::Count() const {
   std::shared_lock lock(m_mutex);
-  return m_files.size();
+  return m_idToIndex.size();
 }
 } // namespace PulseFS::Engine

@@ -45,7 +45,7 @@ cmake --build . --config Release
 
 ## Roadmap
 
-- [ ] Transitioning from CLI to a graphical user interface using Dear ImGui.
+- [x] Transitioning from CLI to a graphical user interface using Dear ImGui.
 - [ ] Implementing multi-threaded indexing for high-capacity storage arrays.
 - [ ] Adding advanced query support (Regex, file size filters, and extension flags).
 - [ ] Multi-volume support for concurrent indexing of multiple NTFS drives.
