@@ -1,4 +1,5 @@
 #include "PulseFS/Renderer/D3D11Renderer.hpp"
+#include <utility>
 
 #pragma comment(lib, "d3d11.lib")
 
@@ -6,7 +7,28 @@ namespace PulseFS::Renderer {
 
 D3D11Renderer::~D3D11Renderer() { Shutdown(); }
 
-bool D3D11Renderer::Initialize(HWND hWnd) {
+D3D11Renderer::D3D11Renderer(D3D11Renderer &&other) noexcept
+    : m_device(std::move(other.m_device)),
+      m_deviceContext(std::move(other.m_deviceContext)),
+      m_swapChain(std::move(other.m_swapChain)),
+      m_renderTargetView(std::move(other.m_renderTargetView)) {}
+
+D3D11Renderer &D3D11Renderer::operator=(D3D11Renderer &&other) noexcept {
+  if (this != &other) {
+    Shutdown();
+    m_device = std::move(other.m_device);
+    m_deviceContext = std::move(other.m_deviceContext);
+    m_swapChain = std::move(other.m_swapChain);
+    m_renderTargetView = std::move(other.m_renderTargetView);
+  }
+  return *this;
+}
+
+PulseFS::Utils::Result<void> D3D11Renderer::Initialize(HWND hWnd) {
+  if (!hWnd) {
+    return PulseFS::Utils::Err<std::string>("Invalid window handle");
+  }
+
   DXGI_SWAP_CHAIN_DESC sd{};
   sd.BufferCount = 2;
   sd.BufferDesc.Width = 0;
@@ -27,72 +49,97 @@ bool D3D11Renderer::Initialize(HWND hWnd) {
       D3D_FEATURE_LEVEL_11_0,
       D3D_FEATURE_LEVEL_10_0,
   };
+  constexpr UINT numFeatureLevels =
+      static_cast<UINT>(std::size(featureLevelArray));
 
-  D3D_FEATURE_LEVEL featureLevel;
-  HRESULT res = D3D11CreateDeviceAndSwapChain(
+  D3D_FEATURE_LEVEL featureLevel{};
+  HRESULT hr = D3D11CreateDeviceAndSwapChain(
       nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createDeviceFlags,
-      featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &m_SwapChain, &m_Device,
-      &featureLevel, &m_DeviceContext);
+      featureLevelArray, numFeatureLevels, D3D11_SDK_VERSION, &sd,
+      m_swapChain.GetAddressOf(), m_device.GetAddressOf(), &featureLevel,
+      m_deviceContext.GetAddressOf());
 
-  if (res == DXGI_ERROR_UNSUPPORTED) {
-    res = D3D11CreateDeviceAndSwapChain(
+  if (hr == DXGI_ERROR_UNSUPPORTED) {
+    hr = D3D11CreateDeviceAndSwapChain(
         nullptr, D3D_DRIVER_TYPE_WARP, nullptr, createDeviceFlags,
-        featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &m_SwapChain, &m_Device,
-        &featureLevel, &m_DeviceContext);
+        featureLevelArray, numFeatureLevels, D3D11_SDK_VERSION, &sd,
+        m_swapChain.GetAddressOf(), m_device.GetAddressOf(), &featureLevel,
+        m_deviceContext.GetAddressOf());
   }
 
-  if (FAILED(res)) {
-    return false;
+  if (FAILED(hr)) {
+    return PulseFS::Utils::Err<std::string>(
+        "Failed to create D3D11 device and swap chain (HRESULT: 0x" +
+        std::to_string(static_cast<unsigned long>(hr)) + ")");
   }
 
-  CreateRenderTarget();
-  return true;
+  return CreateRenderTarget();
 }
 
-void D3D11Renderer::Shutdown() {
+void D3D11Renderer::Shutdown() noexcept {
+  CleanupRenderTarget();
+  m_swapChain.Reset();
+  m_deviceContext.Reset();
+  m_device.Reset();
+}
+
+void D3D11Renderer::BeginFrame(const float clearColor[4]) noexcept {
+  if (m_deviceContext && m_renderTargetView) {
+    m_deviceContext->OMSetRenderTargets(1, m_renderTargetView.GetAddressOf(),
+                                        nullptr);
+    m_deviceContext->ClearRenderTargetView(m_renderTargetView.Get(),
+                                           clearColor);
+  }
+}
+
+void D3D11Renderer::EndFrame() noexcept {
+  if (m_swapChain) {
+    m_swapChain->Present(1, 0);
+  }
+}
+
+PulseFS::Utils::Result<void> D3D11Renderer::OnResize(UINT width, UINT height) {
+  if (!m_swapChain) {
+    return PulseFS::Utils::Err<std::string>("Swap chain not initialized");
+  }
+
   CleanupRenderTarget();
 
-  if (m_SwapChain) {
-    m_SwapChain->Release();
-    m_SwapChain = nullptr;
+  const HRESULT hr =
+      m_swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+  if (FAILED(hr)) {
+    return PulseFS::Utils::Err<std::string>(
+        "Failed to resize swap chain buffers (HRESULT: 0x" +
+        std::to_string(static_cast<unsigned long>(hr)) + ")");
   }
-  if (m_DeviceContext) {
-    m_DeviceContext->Release();
-    m_DeviceContext = nullptr;
-  }
-  if (m_Device) {
-    m_Device->Release();
-    m_Device = nullptr;
-  }
+
+  return CreateRenderTarget();
 }
 
-void D3D11Renderer::BeginFrame(const float clearColor[4]) {
-  m_DeviceContext->OMSetRenderTargets(1, &m_RenderTargetView, nullptr);
-  m_DeviceContext->ClearRenderTargetView(m_RenderTargetView, clearColor);
-}
+PulseFS::Utils::Result<void> D3D11Renderer::CreateRenderTarget() {
+  Microsoft::WRL::ComPtr<ID3D11Texture2D> backBuffer;
+  HRESULT hr =
+      m_swapChain->GetBuffer(0, IID_PPV_ARGS(backBuffer.GetAddressOf()));
 
-void D3D11Renderer::EndFrame() { m_SwapChain->Present(1, 0); }
-
-void D3D11Renderer::OnResize(UINT width, UINT height) {
-  CleanupRenderTarget();
-  m_SwapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
-  CreateRenderTarget();
-}
-
-void D3D11Renderer::CreateRenderTarget() {
-  ID3D11Texture2D *pBackBuffer = nullptr;
-  m_SwapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));
-  if (pBackBuffer) {
-    m_Device->CreateRenderTargetView(pBackBuffer, nullptr, &m_RenderTargetView);
-    pBackBuffer->Release();
+  if (FAILED(hr)) {
+    return PulseFS::Utils::Err<std::string>(
+        "Failed to get back buffer from swap chain (HRESULT: 0x" +
+        std::to_string(static_cast<unsigned long>(hr)) + ")");
   }
+
+  hr = m_device->CreateRenderTargetView(backBuffer.Get(), nullptr,
+                                        m_renderTargetView.GetAddressOf());
+  if (FAILED(hr)) {
+    return PulseFS::Utils::Err<std::string>(
+        "Failed to create render target view (HRESULT: 0x" +
+        std::to_string(static_cast<unsigned long>(hr)) + ")");
+  }
+
+  return PulseFS::Utils::Ok<std::string>();
 }
 
-void D3D11Renderer::CleanupRenderTarget() {
-  if (m_RenderTargetView) {
-    m_RenderTargetView->Release();
-    m_RenderTargetView = nullptr;
-  }
+void D3D11Renderer::CleanupRenderTarget() noexcept {
+  m_renderTargetView.Reset();
 }
 
 } // namespace PulseFS::Renderer

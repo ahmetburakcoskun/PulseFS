@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PulseFS/Engine/SearchIndex.hpp"
+#include "PulseFS/Renderer/D3D11Renderer.hpp"
 #include <atomic>
 #include <mutex>
 #include <string>
@@ -8,9 +9,10 @@
 
 namespace PulseFS::UI {
 
+class IconCache;
 class SearchPanel {
 public:
-  void Initialize(Engine::SearchIndex &index);
+  void Initialize(Engine::SearchIndex &index, Renderer::D3D11Renderer* renderer, IconCache* iconCache);
   void Render();
 
   void SetScanning(bool scanning) { m_IsScanning = scanning; }
@@ -24,9 +26,12 @@ private:
 
   static std::string WideToUtf8(const std::wstring &wstr);
   static std::wstring Utf8ToWide(const std::string &str);
+  static const char* GetFileIcon(const std::wstring &fileName, unsigned long fileAttributes);
+  static bool IsImageFile(const std::wstring &fileName);
 
   Engine::SearchIndex *m_SearchIndex = nullptr;
-
+  Renderer::D3D11Renderer *m_Renderer = nullptr;
+  IconCache *m_IconCache = nullptr;
   char m_SearchQueryBuf[256] = "";
   std::wstring m_CurrentQuery;
   std::vector<unsigned long long> m_SearchResults;

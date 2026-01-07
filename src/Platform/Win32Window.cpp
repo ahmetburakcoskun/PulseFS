@@ -1,6 +1,7 @@
 #include "PulseFS/Platform/Win32Window.hpp"
 #include "imgui.h"
 #include "imgui_impl_win32.h"
+#include <memory>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd,
                                                              UINT msg,
@@ -8,9 +9,6 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd,
                                                              LPARAM lParam);
 
 namespace PulseFS::Platform {
-
-UINT Win32Window::s_ResizeWidth = 0;
-UINT Win32Window::s_ResizeHeight = 0;
 
 Win32Window::~Win32Window() { Destroy(); }
 
@@ -36,6 +34,8 @@ bool Win32Window::Create(const wchar_t *title, int width, int height) {
   if (!m_hWnd) {
     return false;
   }
+
+  ::SetWindowLongPtr(m_hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 
   EnableDarkMode();
   return true;
@@ -74,18 +74,30 @@ void Win32Window::EnableDarkMode() {
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
 
-  HMODULE hDwmapi = LoadLibrary(TEXT("dwmapi.dll"));
-  if (hDwmapi) {
-    typedef HRESULT(WINAPI * DwmSetWindowAttributeFunc)(HWND, DWORD, LPCVOID,
-                                                        DWORD);
-    auto setWindowAttribute = reinterpret_cast<DwmSetWindowAttributeFunc>(
-        GetProcAddress(hDwmapi, "DwmSetWindowAttribute"));
-    if (setWindowAttribute) {
-      BOOL useDarkMode = TRUE;
-      setWindowAttribute(m_hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDarkMode,
-                         sizeof(useDarkMode));
+  struct LibraryDeleter {
+    void operator()(HMODULE h) const {
+      if (h) {
+        ::FreeLibrary(h);
+      }
     }
-    FreeLibrary(hDwmapi);
+  };
+  using ScopedLibrary =
+      std::unique_ptr<std::remove_pointer_t<HMODULE>, LibraryDeleter>;
+
+  ScopedLibrary hDwmapi(::LoadLibrary(TEXT("dwmapi.dll")));
+  if (!hDwmapi) {
+    return;
+  }
+
+  using DwmSetWindowAttributeFunc =
+      HRESULT(WINAPI *)(HWND, DWORD, LPCVOID, DWORD);
+  auto setWindowAttribute = reinterpret_cast<DwmSetWindowAttributeFunc>(
+      ::GetProcAddress(hDwmapi.get(), "DwmSetWindowAttribute"));
+
+  if (setWindowAttribute) {
+    BOOL useDarkMode = TRUE;
+    setWindowAttribute(m_hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDarkMode,
+                       sizeof(useDarkMode));
   }
 }
 
@@ -98,8 +110,12 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hWnd, UINT msg, WPARAM wParam,
   switch (msg) {
   case WM_SIZE:
     if (wParam != SIZE_MINIMIZED) {
-      s_ResizeWidth = static_cast<UINT>(LOWORD(lParam));
-      s_ResizeHeight = static_cast<UINT>(HIWORD(lParam));
+      auto *window = reinterpret_cast<Win32Window *>(
+          ::GetWindowLongPtr(hWnd, GWLP_USERDATA));
+      if (window) {
+        window->m_resizeWidth = static_cast<UINT>(LOWORD(lParam));
+        window->m_resizeHeight = static_cast<UINT>(HIWORD(lParam));
+      }
     }
     return 0;
   case WM_SYSCOMMAND:
@@ -115,16 +131,16 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hWnd, UINT msg, WPARAM wParam,
 }
 
 std::pair<UINT, UINT> Win32Window::GetPendingResize() const {
-  return {s_ResizeWidth, s_ResizeHeight};
+  return {m_resizeWidth, m_resizeHeight};
 }
 
 void Win32Window::ClearPendingResize() {
-  s_ResizeWidth = 0;
-  s_ResizeHeight = 0;
+  m_resizeWidth = 0;
+  m_resizeHeight = 0;
 }
 
 bool Win32Window::HasPendingResize() const {
-  return s_ResizeWidth != 0 && s_ResizeHeight != 0;
+  return m_resizeWidth != 0 && m_resizeHeight != 0;
 }
 
 } // namespace PulseFS::Platform

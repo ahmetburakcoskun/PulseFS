@@ -34,13 +34,11 @@ Bash
 - CMake 3.15+
 - C++20 compatible compiler (MSVC 19.29+, GCC 10+, Clang 10+)
 - Windows 10/11 (NTFS Volume)
-
 ```
 mkdir build
 cd build
 cmake ..
 cmake --build . --config Release
-
 ```
 
 ## Roadmap

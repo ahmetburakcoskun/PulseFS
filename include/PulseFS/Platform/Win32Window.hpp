@@ -31,8 +31,8 @@ private:
   HWND m_hWnd = nullptr;
   WNDCLASSEXW m_WindowClass{};
 
-  static UINT s_ResizeWidth;
-  static UINT s_ResizeHeight;
+  UINT m_resizeWidth = 0;
+  UINT m_resizeHeight = 0;
 };
 
 } // namespace PulseFS::Platform

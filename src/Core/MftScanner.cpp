@@ -55,7 +55,8 @@ long long MftScanner::Enumerate(Engine::SearchIndex &index,
                               pRecord->FileNameLength / sizeof(WCHAR));
         if (!fileName.empty()) {
           index.Insert({std::move(fileName), pRecord->FileReferenceNumber,
-                        pRecord->ParentFileReferenceNumber, true});
+                        pRecord->ParentFileReferenceNumber, 
+                        pRecord->FileAttributes, true});
           fileCount++;
         }
 

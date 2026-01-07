@@ -1,7 +1,9 @@
 #pragma once
 
+#include "PulseFS/Utils/Result.hpp"
 #include <Windows.h>
 #include <d3d11.h>
+#include <wrl/client.h>
 
 
 namespace PulseFS::Renderer {
@@ -14,26 +16,34 @@ public:
   D3D11Renderer(const D3D11Renderer &) = delete;
   D3D11Renderer &operator=(const D3D11Renderer &) = delete;
 
-  bool Initialize(HWND hWnd);
-  void Shutdown();
+  D3D11Renderer(D3D11Renderer &&other) noexcept;
+  D3D11Renderer &operator=(D3D11Renderer &&other) noexcept;
 
-  void BeginFrame(const float clearColor[4]);
-  void EndFrame();
-  void OnResize(UINT width, UINT height);
+  [[nodiscard]] PulseFS::Utils::Result<void> Initialize(HWND hWnd);
+  void Shutdown() noexcept;
 
-  [[nodiscard]] ID3D11Device *GetDevice() const { return m_Device; }
-  [[nodiscard]] ID3D11DeviceContext *GetDeviceContext() const {
-    return m_DeviceContext;
+  void BeginFrame(const float clearColor[4]) noexcept;
+  void EndFrame() noexcept;
+  [[nodiscard]] PulseFS::Utils::Result<void> OnResize(UINT width, UINT height);
+
+  [[nodiscard]] ID3D11Device *GetDevice() const noexcept {
+    return m_device.Get();
+  }
+  [[nodiscard]] ID3D11DeviceContext *GetDeviceContext() const noexcept {
+    return m_deviceContext.Get();
+  }
+  [[nodiscard]] bool IsInitialized() const noexcept {
+    return m_device != nullptr;
   }
 
 private:
-  void CreateRenderTarget();
-  void CleanupRenderTarget();
+  [[nodiscard]] PulseFS::Utils::Result<void> CreateRenderTarget();
+  void CleanupRenderTarget() noexcept;
 
-  ID3D11Device *m_Device = nullptr;
-  ID3D11DeviceContext *m_DeviceContext = nullptr;
-  IDXGISwapChain *m_SwapChain = nullptr;
-  ID3D11RenderTargetView *m_RenderTargetView = nullptr;
+  Microsoft::WRL::ComPtr<ID3D11Device> m_device;
+  Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_deviceContext;
+  Microsoft::WRL::ComPtr<IDXGISwapChain> m_swapChain;
+  Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_renderTargetView;
 };
 
 } // namespace PulseFS::Renderer

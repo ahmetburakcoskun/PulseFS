@@ -116,6 +116,15 @@ std::wstring SearchIndex::GetFullPath(unsigned long long id) const {
   return ResolvePathInternal(id);
 }
 
+unsigned long SearchIndex::GetAttributes(unsigned long long id) const {
+  std::shared_lock lock(m_mutex);
+  if (auto it = m_idToIndex.find(id); it != m_idToIndex.end()) {
+    size_t idx = it->second;
+    return m_files[idx].fileAttributes;
+  }
+  return 0;
+}
+
 size_t SearchIndex::Count() const {
   std::shared_lock lock(m_mutex);
   return m_idToIndex.size();

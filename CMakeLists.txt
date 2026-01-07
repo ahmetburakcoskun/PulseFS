@@ -32,6 +32,7 @@ set(SOURCES
     src/ImGui/ImGuiTheme.cpp
     src/Platform/Win32Window.cpp
     src/Renderer/D3D11Renderer.cpp
+    src/UI/IconCache.cpp
     src/UI/MainWindow.cpp
     src/UI/SearchPanel.cpp
     ${IMGUI_SOURCES}

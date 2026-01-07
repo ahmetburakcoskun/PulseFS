@@ -71,7 +71,8 @@ void UsnMonitor::MonitorLoop(std::wstring volumePath, long long startUsn) {
 
           if (pRecord->Reason & USN_REASON_FILE_CREATE) {
             m_index.Insert({name, pRecord->FileReferenceNumber,
-                            pRecord->ParentFileReferenceNumber, true});
+                            pRecord->ParentFileReferenceNumber, 
+                            pRecord->FileAttributes, true});
 
           } else if (pRecord->Reason & USN_REASON_FILE_DELETE) {
             m_index.Remove(pRecord->FileReferenceNumber);

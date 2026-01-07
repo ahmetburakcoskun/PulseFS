@@ -13,6 +13,7 @@ struct FileEntry {
   std::wstring name;
   unsigned long long id;
   unsigned long long parentId;
+  unsigned long fileAttributes = 0;
   bool active = true;
 };
 
@@ -37,6 +38,8 @@ public:
                                          size_t maxResults = 20) const;
 
   std::wstring GetFullPath(unsigned long long id) const;
+
+  unsigned long GetAttributes(unsigned long long id) const;
 
   size_t Count() const;
 

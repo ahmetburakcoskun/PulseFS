@@ -1,6 +1,8 @@
 #include "PulseFS/UI/SearchPanel.hpp"
+#include "PulseFS/UI/IconCache.hpp"
 #include "imgui.h"
 #include <Windows.h>
+#include <algorithm>
 #include <chrono>
 #include <shellapi.h>
 #include <thread>
@@ -8,8 +10,10 @@
 
 namespace PulseFS::UI {
 
-void SearchPanel::Initialize(Engine::SearchIndex &index) {
+void SearchPanel::Initialize(Engine::SearchIndex &index, Renderer::D3D11Renderer* renderer, IconCache* iconCache) {
   m_SearchIndex = &index;
+  m_Renderer = renderer;
+  m_IconCache = iconCache;
 
   std::thread([this]() {
     std::wstring lastQuery;
@@ -142,6 +146,19 @@ void SearchPanel::RenderResultsTable() {
       currentResultsCopy = m_SearchResults;
     }
 
+    std::sort(currentResultsCopy.begin(), currentResultsCopy.end(),
+              [this](unsigned long long idA, unsigned long long idB) {
+                unsigned long attrsA = m_SearchIndex->GetAttributes(idA);
+                unsigned long attrsB = m_SearchIndex->GetAttributes(idB);
+                bool isDirA = (attrsA & FILE_ATTRIBUTE_DIRECTORY) != 0;
+                bool isDirB = (attrsB & FILE_ATTRIBUTE_DIRECTORY) != 0;
+                
+                if (isDirA != isDirB) {
+                  return isDirA;
+                }
+                return false;
+              });
+
     for (auto id : currentResultsCopy) {
       std::wstring fullPath = m_SearchIndex->GetFullPath(id);
       if (fullPath.empty())
@@ -156,7 +173,28 @@ void SearchPanel::RenderResultsTable() {
                                  ? fullPathUtf8.substr(lastSlash + 1)
                                  : fullPathUtf8;
 
+      unsigned long fileAttrs = m_SearchIndex->GetAttributes(id);
+      bool isDir = (fileAttrs & FILE_ATTRIBUTE_DIRECTORY) != 0;
+      
+      if (m_IconCache) {
+        ID3D11ShaderResourceView* iconTexture = m_IconCache->GetIcon(fullPath, isDir);
+        if (iconTexture) {
+          ImGui::Image((void*)iconTexture, ImVec2(16, 16));
+          ImGui::SameLine();
+        }
+      }
+      
       ImGui::Text("%s", fileName.c_str());
+
+      if (IsImageFile(fullPath) && ImGui::IsItemHovered() && m_IconCache) {
+        auto* thumbnail = m_IconCache->GetImageThumbnail(fullPath);
+        if (thumbnail) {
+          ImGui::BeginTooltip();
+          ImGui::Image((void*)thumbnail, ImVec2(256, 256));
+          ImGui::EndTooltip();
+        }
+      }
+      
       if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
         OpenFile(fullPath);
       }
@@ -195,6 +233,71 @@ std::wstring SearchPanel::Utf8ToWide(const std::string &str) {
   MultiByteToWideChar(CP_UTF8, 0, &str[0], static_cast<int>(str.size()),
                       &wstrTo[0], size_needed);
   return wstrTo;
+}
+
+const char* SearchPanel::GetFileIcon(const std::wstring &fileName, unsigned long fileAttributes) {
+  if (fileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+    return "[DIR]";
+  }
+  
+  size_t lastDot = fileName.find_last_of(L'.');
+  if (lastDot == std::wstring::npos) {
+    return "[FILE]";
+  }
+  
+  std::wstring ext = fileName.substr(lastDot + 1);
+  std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+  
+  if (ext == L"jpg" || ext == L"jpeg" || ext == L"png" || 
+      ext == L"bmp" || ext == L"gif" || ext == L"ico" || 
+      ext == L"tiff" || ext == L"webp") {
+    return "[IMG]";
+  }
+  else if (ext == L"mp4" || ext == L"avi" || ext == L"mkv" || 
+           ext == L"mov" || ext == L"wmv" || ext == L"flv") {
+    return "[VID]";
+  }
+  else if (ext == L"mp3" || ext == L"wav" || ext == L"flac" || 
+           ext == L"m4a" || ext == L"wma" || ext == L"ogg") {
+    return "[AUD]";
+  }
+  else if (ext == L"zip" || ext == L"rar" || ext == L"7z" || 
+           ext == L"tar" || ext == L"gz") {
+    return "[ZIP]";
+  }
+  else if (ext == L"exe" || ext == L"msi" || ext == L"bat") {
+    return "[EXE]";
+  }
+  else if (ext == L"txt" || ext == L"log") {
+    return "[TXT]";
+  }
+  else if (ext == L"pdf") {
+    return "[PDF]";
+  }
+  else if (ext == L"doc" || ext == L"docx") {
+    return "[DOC]";
+  }
+  else if (ext == L"cpp" || ext == L"h" || ext == L"hpp" || 
+           ext == L"c" || ext == L"cs" || ext == L"java" || 
+           ext == L"py" || ext == L"js" || ext == L"html" || 
+           ext == L"css" || ext == L"json") {
+    return "[CODE]";
+  }
+  
+  return "[FILE]";
+}
+
+bool SearchPanel::IsImageFile(const std::wstring &fileName) {
+  size_t lastDot = fileName.find_last_of(L'.');
+  if (lastDot == std::wstring::npos)
+    return false;
+  
+  std::wstring ext = fileName.substr(lastDot + 1);
+  std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+  
+  return ext == L"jpg" || ext == L"jpeg" || ext == L"png" || 
+         ext == L"bmp" || ext == L"gif" || ext == L"ico" || 
+         ext == L"tiff" || ext == L"tif" || ext == L"webp";
 }
 
 } // namespace PulseFS::UI
